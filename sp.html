@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    <meta charset="utf-8" name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <style>
+            canvas{
+                border:1px solid blue;
+                background-color:white;
+            }
+        </style>
+    </head>
+    <body onload="Area.start(x,y,size)">
+        <script>
+            var pa1=0.1;//これでゴールの位置を１１２こ（ゴーストが入れない場所を除く）学習すれば、パックマンが作れる。しかし、価値のマップをファイルに保存してから別のプログラムを組む必要がある。
+            var pa2=0.2;
+            var pa3=0.7;
+            var x=11;
+            var y=11;
+            var size=25;
+            var count=0;
+            var walls=[];
+            var wallpo1=[];
+            var wallpo=[[1,12],[3,14],[4,15],[6,17],[7,18],[9,20],[12,23],[14,25],[16,27],[18,29],[20,31]];
+            wallpo.push([22,23],[24,35],[26,37],[27,38],[28,39],[30,41],[31,32]);
+            wallpo.push([33,34],[34,35],[35,46],[35,36],[36,37],[38,49],[39,40],[40,41],[41,52],[41,42],[42,43]);
+            wallpo.push([44,45],[46,57],[47,48],[48,49],[49,50],[50,51],[52,63],[53,54]);
+            for(var i=0;i<wallpo.length;i++){
+                wallpo1.push([x*y-1-wallpo[i][0],x*y-1-wallpo[i][1]]);
+            }
+            wallpo.push([56,57],[57,58],[59,60],[60,61],[62,63],[63,64]);
+            wallpo=wallpo.concat(wallpo1);
+            for(var i=0;i<wallpo.length;i++){
+                walls.push(new Wall(x,y,wallpo[i][0],wallpo[i][1]));
+            }
+            var tt=[];
+            for(var i=0;i<99;i++){
+                tt.push(0);
+            }
+            var Area={
+                stra:tt,
+                st:0,
+                end:99,
+                canvas:document.createElement("canvas"),
+                start:function(x,y,size){
+                    this.x=x;
+                    this.y=y;
+                    this.size=size;
+                    this.canvas.width=this.size*this.x;
+                    this.canvas.height=this.size*this.y;
+                    this.context=this.canvas.getContext("2d");
+                    document.body.insertBefore(this.canvas,document.body.childNodes[0]);
+                    while(1){
+                        Area.st=Math.floor(Math.random()*x*y);
+                        if(Area.st!=Area.end&&Area.st!=35&&Area.st!=41&&Area.st!=57&&Area.st!=63&&Area.st!=79&&Area.st!=85&&Area.st!=49&&Area.st!=60&&Area.st!=71){
+                            break;
+                        }
+                    }
+//                    this.st=120;
+//                    caution
+                    Brain.setpro(this.st,pa1,pa2,pa3);
+                    Brain.setQ(this.end);
+                    Brain.goodp=0;
+                    console.log("set");
+                    this.interval=setInterval(update,1);
+                },
+                valid:function(s,e){
+                    clearInterval(Area.interval);
+                    Area.end=e;
+                    while(1){
+                        Area.st=Math.floor(Math.random()*x*y);
+                        if(Area.st!=Area.end&&Area.st!=35&&Area.st!=41&&Area.st!=57&&Area.st!=63&&Area.st!=79&&Area.st!=85&&Area.st!=49&&Area.st!=60&&Area.st!=71){
+                            break;
+                        }
+                    }
+                    Brain.state=s;
+                    Brain.count=0;
+                    Brain.Q=Area.stra[Area.end];
+                    this.interval=setInterval(validation,10);
+                }
+            }
+            function Wall(x,y,number1,number2){
+                this.number1=Math.min(number1,number2);
+                this.number2=Math.max(number1,number2);
+                this.ok=(this.number2-this.number1)%x;
+                this.update=function(){
+                    ctx=Area.context;
+                    ctx.fillStyle="blue";
+                    ctx.fillRect((this.number2%Area.x)*25,Math.floor(this.number2/Area.x)*25,(1-this.ok)*24+1,this.ok*24+1);
+                }
+            }
+
+            var Brain={
+                setpro:function(state,lr,gamma,eps){
+                    this.state=state;  //start point
+                    this.action;
+                    this.lr=lr;
+                    this.gamma=gamma;
+                    this.eps=eps;
+                    this.reward=0;
+                    this.i=0;
+                    this.nextstate=0;
+                    this.randoms=[];
+                    this.count=0;
+                    this.memory=[];
+                },
+                setQ:function(pac){
+                    this.Q=[];
+                    for(i=0;i<Area.x*Area.y;i++){
+                        this.randoms=[];
+                        for(j=0;j<4;j++){
+                            this.randoms.push(Math.random());
+                        }
+                        this.Q.push(this.randoms);
+                    }
+//                    for(i=0;i<Area.x*Area.y;i++){
+//                        this.randoms=[];
+//                        for(j=0;j<4;j++){
+//                            this.randoms.push(0);
+//                        }
+//                        this.Q.push(this.randoms);
+//                    }
+                    this.Q[pac]=[100,100,100,100];
+                    this.memory=[];
+                },
+                step:function(){
+//                    var pre=this.Q[this.nextstate];
+//                    this.Q[this.state][this.action]+=this.lr*(this.reward+this.gamma*Math.max(pre[0],pre[1],pre[2],pre[3]));
+                    this.memory.push([this.state,this.action]);
+                },
+                hello:function(){
+                    while(this.memory.length){
+                        this.Q[this.memory[0][0]][this.memory[0][1]]-=1;
+                        this.Q[this.memory[0][0]][this.memory[0][1]]/=1000;
+                        this.memory.shift();
+                    }
+                },
+                decidedirection:function(){
+                    while(1){
+                        this.di=1;
+                        while(1){
+                            if(Math.random()<this.eps){
+                                var pre=this.Q[this.state];
+                                this.action=(4+pre.indexOf(Math.max(pre[0],pre[1],pre[2],pre[3])))%4;
+                            }
+                            else if(Math.random()>=this.eps){
+                                this.action=Math.floor(Math.random()*4);
+                            }
+                            if((Math.abs(this.action-1)==1)&&(Math.floor(this.state/Area.x)+this.action-1>=0)&&(Math.floor(this.state/Area.x)+this.action-1<Area.y)){
+                                break;
+                            }
+                            if((Math.abs(this.action-2)==1)&&(Math.floor(this.state%Area.x)+2-this.action>=0)&&(Math.floor(this.state%Area.x)+2-this.action<Area.x)){break;
+                            }
+                        }
+//                        this.action=Math.floor(Math.random()*4);
+                        if(Math.abs(this.action-1)==1){
+                            this.nextstate=Math.floor(this.state+Area.x*(this.action-1));
+                        }
+                        else if(Math.abs(this.action-2)==1){
+                            this.nextstate=Math.floor(this.state+2-this.action);
+                        }
+                        for(var i=0;i<wallpo.length;i++){
+                            if((wallpo[i][0]==this.state)&&(wallpo[i][1]==this.nextstate)||((wallpo[i][0]==this.nextstate)&&(wallpo[i][1]==this.state))){
+                                this.di=0;
+                                break;
+                            }
+                        }
+                        if(this.di){
+                            break;
+                        }
+                    }
+                },
+                apperance:function(){
+                    ctx=Area.context;
+                    ctx.fillStyle="red";
+                    if(Math.abs(this.action-1)==1){
+                        ctx.fillRect((this.state%Area.x)*25,Math.floor(this.state/Area.x)*25+(this.action-1)*25,25,25);
+                    }
+                    else{
+                        ctx.fillRect((this.state%Area.x+2-this.action)*25,Math.floor(this.state/Area.x)*25,25,25);
+                    }
+                    this.state=this.nextstate;
+                },
+                nextpac:function(){
+                    clearInterval(Area.interval);
+                    var ind=[];
+                    for(var i=0;i<this.Q.length;i++){
+                        var oo=this.Q[i];
+                        ind.push(oo.indexOf(Math.max(oo[0],oo[1],oo[2],oo[3])));
+                    }
+                    Area.stra.push(ind);
+                    if((Area.stra.length==35)||(Area.stra.length==41)||(Area.stra.length==57)||(Area.stra.length==63)||(Area.stra.length==79)||(Area.stra.length==85)||(Area.stra.length==49)||(Area.stra.length==60)||(Area.stra.length==71)){
+                        Area.stra.push(ind);
+                    }
+                    Area.end=Area.stra.length;
+                    if(Area.stra.length!=121){
+                        Area.start(x,y,size);
+                    }
+                }
+            }
+            function update(){
+                Area.context.clearRect(0,0,Area.canvas.width,Area.canvas.height);
+                for(var i=0;i<walls.length;i++){
+                    walls[i].update();
+                }
+                Brain.decidedirection();
+                Brain.step();
+                Brain.apperance();
+                if(Brain.state==Area.end){
+                    Brain.goodp+=1;
+                    while(Brain.memory.length){  //ゴールに着いたときのみQ関数の更新を行う。更新の仕方も違う。
+                        Brain.Q[Brain.memory[0][0]][Brain.memory[0][1]]+=(30-Brain.count)/Brain.count;
+                        Brain.memory.shift();
+                    }
+                    Brain.count=-1;
+                    while(1){
+                        Area.st=Math.floor(Math.random()*x*y);
+                        if(Area.st!=Area.end&&Area.st!=35&&Area.st!=41&&Area.st!=57&&Area.st!=63&&Area.st!=79&&Area.st!=85&&Area.st!=49&&Area.st!=60&&Area.st!=71){
+                            break;
+                        }
+//                        Area.st=120;
+//                        caution
+                    }
+                    Brain.setpro(Area.st,pa1,pa2,pa3);
+                }
+                Brain.count+=1;
+                if(Brain.count==30){
+                    if(Math.random()<0.1){
+                        while(1){
+                            Area.st=Math.floor(Math.random()*x*y);
+                            if(Area.st!=Area.end&&Area.st!=35&&Area.st!=41&&Area.st!=57&&Area.st!=63&&Area.st!=79&&Area.st!=85&&Area.st!=49&&Area.st!=60&&Area.st!=71){
+                                break;
+                            }
+                        }
+                    }
+                    
+//                    Area.st=120;
+//                    caution
+                    Brain.setpro(Area.st,pa1,pa2,pa3);
+//                    Brain.hello();
+                }
+                if(Brain.goodp%100==0){
+                    console.log(Brain.goodp);
+                }
+                if(Brain.goodp==500){//ゴール回数の指定、５００回で学習終了
+                    Brain.nextpac();
+                }
+            }
+            function validation(){
+                Brain.count+=1;
+                Area.context.clearRect(0,0,Area.canvas.width,Area.canvas.height);
+                for(var i=0;i<walls.length;i++){
+                    walls[i].update();
+                }
+                Brain.decidedirection();
+                Brain.apperance();
+                if(Brain.state==Area.end){
+                    console.log("finish",Brain.count);
+                    clearInterval(Area.interval);
+                }
+            }
+            function download(data, filename, type) {
+                var file = new Blob([data], {type: type});
+                if (window.navigator.msSaveOrOpenBlob) // IE10+
+                    window.navigator.msSaveOrOpenBlob(file, filename);
+                else { // Others
+                    var a = document.createElement("a"),
+                            url = URL.createObjectURL(file);
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(function() {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);  
+                    }, 0); 
+                }
+            }
+        </script>
+    </body>
+</html>
